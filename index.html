@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Theory: 万物演繹マシン</title>
+    <style>
+        body { font-family: sans-serif; padding: 15px; background-color: #fcfcfc; }
+        input { font-size: 16px; padding: 10px; width: 60%; max-width: 200px; }
+        button { font-size: 16px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 5px; }
+        pre { background: #eee; padding: 12px; overflow-x: auto; font-size: 14px; line-height: 1.5; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h2>ID Theory: 世代問題・万物演繹ツール</h2>
+    <p>入力された座から、3世代分の質量・座標スライドと全物性を純粋演繹します。</p>
+    
+    <input type="text" id="formula" placeholder="例: H2O" />
+    <button onclick="runDeduction()">演繹開始</button>
+    
+    <pre id="result">ここに演繹結果が表示されます</pre>
+
+    <script>
+        let db = [];
+        // CSVの読み込み処理
+        fetch('ID_Master_Database.csv').then(r => r.text()).then(text => {
+            let lines = text.split('\n');
+            let headers = lines[0].split(',');
+            for(let i=1; i<lines.length; i++){
+                if(!lines[i].trim()) continue;
+                let cols = lines[i].split(',');
+                let obj = {};
+                headers.forEach((h, idx) => obj[h.trim()] = cols[idx].trim());
+                db.push(obj);
+            }
+        }).catch(e => document.getElementById('result').innerText = "CSVの読み込みに失敗しました。");
+
+        function hexToInt(h) {
+            if(!h) return 0;
+            return parseInt(h, 16);
+        }
+
+        function runDeduction() {
+            let formula = document.getElementById('formula').value.trim();
+            if(!formula || db.length === 0) return;
+            
+            // 化学式の解読
+            let regex = /([A-Z][a-z]?)(\d*)/g;
+            let parsed = {};
+            let match;
+            while ((match = regex.exec(formula)) !== null) {
+                let count = match[2] ? parseInt(match[2]) : 1;
+                parsed[match[1]] = (parsed[match[1]] || 0) + count;
+            }
+
+            let base_mass = 0, base_depth = 0, max_w_ratio = 1.0;
+
+            // 第1世代の初期パラメータ合算
+            for (let sym in parsed) {
+                let row = db.find(r => r.Symbol === sym);
+                if(!row) {
+                    document.getElementById('result').innerText = "エラー: " + sym + " がマスターデータに見つかりません。";
+                    return;
+                }
+                let m = parseFloat(row.Mass);
+                let zc = hexToInt(row.Zc_Hex);
+                let w = hexToInt(row.W_Hex);
+                if(w === 0) w = 32768;
+                
+                base_mass += m * parsed[sym];
+                base_depth += (w - zc) * parsed[sym];
+                max_w_ratio = Math.max(max_w_ratio, w / 32768.0);
+            }
+
+            let out = "【入力された座】: " + formula + "\n";
+            out += "=================================================\n";
+            let neutron_unit = 1.00866; // 中性子1つ分のジャンプ単位
+
+            // 世代問題に基づく3スロットの演繹（座標と質量のスライド）
+            for(let gen = 1; gen <= 3; gen++) {
+                let gen_mass = base_mass + (gen - 1) * neutron_unit;
+                let gen_depth = base_mass > 0 ? base_depth * Math.sqrt(gen_mass / base_mass) : base_depth;
+                
+                // オムニバス物性演繹 (ZPE, スペクトル, 沸点等の全物性)
+                let zpe = (gen_depth / 100.0) * gen_mass;
+                let ev = (zpe / gen_mass) * max_w_ratio * 4.5;
+                let l_max = ev > 0 ? 1240.0 / ev : 0;
+                let tb = ((gen_depth / gen_mass) * 1.5) * Math.exp(120.0 * (max_w_ratio - 1.0)) - 273.15;
+
+                out += "■ " + (gen === 1 ? "第1世代 (Base)" : "第" + gen + "世代") + "\n";
+                out += "  ├ 精密質量: " + gen_mass.toFixed(3) + "\n";
+                out += "  ├ 空間深度 (W-Zc): " + gen_depth.toFixed(1) + "\n";
+                out += "  ├ 零点エネルギー(ZPE): " + zpe.toFixed(2) + "\n";
+                out += "  ├ 吸収スペクトル: " + l_max.toFixed(2) + " nm\n";
+                out += "  └ 結合指標 (推定沸点): " + tb.toFixed(1) + " C\n";
+                out += "-------------------------------------------------\n";
+            }
+            
+            document.getElementById('result').innerText = out;
+        }
+    </script>
+</body>
+</html>
