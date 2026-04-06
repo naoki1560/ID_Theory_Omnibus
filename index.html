@@ -89,6 +89,13 @@
             if(!formula || db.length === 0) return;
             
             let parsed = parseFormula(formula);
+            
+            // 安全装置：有効な元素が認識できなかった場合はストップ
+            if (Object.keys(parsed).length === 0) {
+                document.getElementById('result').innerText = "エラー: 有効な化学式が入力されていません。";
+                return;
+            }
+
             let base_mass = 0, base_depth = 0, max_w_ratio = 1.0;
 
             // 第1世代の初期パラメータ合算
@@ -118,11 +125,11 @@
                 // 質量増分による空間深度の再計算（幾何学的スライド）
                 let gen_depth = base_mass > 0 ? base_depth * Math.sqrt(gen_mass / base_mass) : base_depth;
                 
-                // オムニバス物性演繹
+                // オムニバス物性演繹 (ZPE, スペクトル, 溶解ポテンシャル, 熱力学指標)
                 let zpe = (gen_depth / 100.0) * gen_mass;
                 let ev = (zpe / gen_mass) * max_w_ratio * 4.5;
                 let l_max = ev > 0 ? 1240.0 / ev : 0;
-                let polarity_potential = (gen_depth * max_w_ratio) / gen_mass; // 極性や溶解度のベースとなる指標
+                let polarity_potential = (gen_depth * max_w_ratio) / gen_mass; 
                 let thermal_index = ((gen_depth / gen_mass) * 1.5) * Math.exp(120.0 * (max_w_ratio - 1.0)) - 273.15;
 
                 out += "■ " + (gen === 1 ? "第1世代 (Base)" : "第" + gen + "世代") + "\n";
@@ -131,7 +138,7 @@
                 out += "  ├ 零点エネルギー(ZPE): " + zpe.toFixed(2) + " eV\n";
                 out += "  ├ 吸収スペクトル: " + l_max.toFixed(2) + " nm\n";
                 out += "  ├ 極性ポテンシャル: " + polarity_potential.toFixed(3) + "\n";
-                out += "  └ 熱力学指標: " + thermal_index.toFixed(1) + "\n";
+                out += "  └ 熱力学指標: " + thermal_index.toFixed(1) + " C\n";
                 out += "-------------------------------------------------\n";
             }
             
