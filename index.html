@@ -1,111 +1,128 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Isomer Scanner</title>
+<title>Isomer Scanner V13 Fix</title>
+<style>
+body { font-family: sans-serif; padding: 20px; background:#111; color:#eee;}
+input, button { padding:10px; font-size:16px; }
+.result { margin-top:20px; }
+.mode { margin-bottom:15px; padding:10px; background:#222; }
+</style>
 </head>
-
 <body>
 
-<h2>Isomer Scanner</h2>
+<h2>Isomer Scanner（修正版）</h2>
 
-<input id="formula" placeholder="C5H12">
+<input id="formula" placeholder="例: C5H12">
 <button onclick="runScan()">Scan</button>
 
-<div id="output"></div>
+<div id="output" class="result"></div>
 
 <script>
-// ===== 原子データ =====
-const atom_freq = {
-  H: 128.16,
-  C: 100.36,
-  O: 91.85,
-  N: 96.01,
-  Cl: 45.0,
-  S: 64.28
+const atomFreq = {
+  H:128.16, C:100.36, N:96.01, O:91.85,
+  F:85.93, S:64.28, Cl:45.0, Br:25.0, I:15.0
 };
 
-// ===== 化学式パース =====
-function parseFormula(formula) {
+function parseFormula(formula){
   const regex = /([A-Z][a-z]?)(\d*)/g;
-  let match;
-  let result = {};
-  while ((match = regex.exec(formula)) !== null) {
-    const el = match[1];
-    const count = match[2] ? parseInt(match[2]) : 1;
-    if (atom_freq[el]) {
-      result[el] = (result[el] || 0) + count;
+  let match, comp = {};
+  while ((match = regex.exec(formula)) !== null){
+    let el = match[1];
+    let count = parseInt(match[2] || "1");
+    if(atomFreq[el]){
+      comp[el] = (comp[el]||0) + count;
     }
   }
-  return result;
+  return comp;
 }
 
-// ===== ローカルミニマム判定 =====
-function isLocalMinimum(errors, i) {
-  return errors[i] < errors[i-1] && errors[i] < errors[i+1];
-}
-
-// ===== dz分類 =====
-function classifyDz(dz) {
-  if (dz > 200000) return "A: Linear";
-  if (dz > 80000) return "B: Branched";
-  if (dz > 20000) return "C: Compact";
-  if (dz > 5000) return "D: Ring";
-  if (dz > 1000) return "E: Small Ring";
-  return "F: Ultra Compact";
-}
-
-// ===== メイン =====
-function runScan() {
+function runScan(){
   const formula = document.getElementById("formula").value;
-  const parsed = parseFormula(formula);
+  const atoms = parseFormula(formula);
 
   let freq_sum = 0;
-  for (let el in parsed) {
-    freq_sum += atom_freq[el] * parsed[el];
+  for(let el in atoms){
+    freq_sum += atomFreq[el] * atoms[el];
   }
 
-  let step = 0.001;
-  let errors = [];
   let ks = [];
+  let errors = [];
+  let step = 0.001; // 軽量化
 
-  for (let k = 0.1; k <= 20; k += step) {
-    let error = 0;
-    for (let el in parsed) {
-      let val = atom_freq[el] * k;
-      error += Math.abs(val - Math.round(val));
+  for(let k=0.1; k<=20; k+=step){
+    let err = 0;
+    for(let el in atoms){
+      let val = atomFreq[el]*k;
+      err += Math.abs(val - Math.round(val));
     }
     ks.push(k);
-    errors.push(error);
+    errors.push(err);
   }
 
+  let peaks = findPeaks(errors, ks);
+  peaks.sort((a,b)=>a.error-b.error);
+  peaks = filterDistance(peaks, 0.5).slice(0,3);
+
+  render(peaks, freq_sum);
+}
+
+function findPeaks(errors, ks){
   let peaks = [];
-  for (let i = 1; i < errors.length - 1; i++) {
-    if (isLocalMinimum(errors, i) && errors[i] < 0.05) {
+
+  for(let i=2; i<errors.length-2; i++){
+    let isMin =
+      errors[i] < errors[i-1] &&
+      errors[i] < errors[i+1] &&
+      errors[i] < errors[i-2] &&
+      errors[i] < errors[i+2];
+
+    let prominence =
+      Math.max(errors[i-2], errors[i+2]) - errors[i];
+
+    if(isMin && prominence > 0.05){
       peaks.push({k: ks[i], error: errors[i]});
     }
   }
+  return peaks;
+}
 
-  peaks.sort((a,b)=>a.error-b.error);
-  let top = peaks.slice(0,6).sort((a,b)=>a.k-b.k);
+function filterDistance(peaks, minDist){
+  let filtered = [];
 
-  let out = "";
-  if (top.length === 0) {
-    out = "No resonance modes found.";
-  } else {
-    top.forEach((p,i)=>{
-      let dz = Math.pow((freq_sum / (1.02 * p.k)),2);
-      let type = classifyDz(dz);
-      out += `
-      <b>Mode ${i+1}</b><br>
-      K = ${p.k.toFixed(4)}<br>
-      dz = ${dz.toFixed(1)}<br>
-      Type = ${type}<br><br>
-      `;
-    });
-  }
+  peaks.sort((a,b)=>a.k-b.k);
 
-  document.getElementById("output").innerHTML = out;
+  peaks.forEach(p=>{
+    if(!filtered.some(f => Math.abs(f.k - p.k) < minDist)){
+      filtered.push(p);
+    }
+  });
+
+  return filtered;
+}
+
+function render(peaks, freq_sum){
+  const out = document.getElementById("output");
+  out.innerHTML = "";
+
+  peaks.forEach((p,i)=>{
+    let dz = Math.pow((freq_sum/(1.02*p.k)),2);
+
+    let type = "Unknown";
+    if(i===0) type = "A: Linear";
+    if(i===1) type = "B: Branched";
+    if(i===2) type = "C: Compact";
+
+    out.innerHTML += `
+      <div class="mode">
+        <b>Mode ${i+1}</b><br>
+        K = ${p.k.toFixed(4)}<br>
+        dz = ${dz.toFixed(1)}<br>
+        Type = ${type}
+      </div>
+    `;
+  });
 }
 </script>
 
