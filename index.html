@@ -49,9 +49,9 @@ function runScan(){
 
   let ks = [];
   let errors = [];
-  let step = 0.001; // 軽量化
+  let step = 0.0001;
 
-  for(let k=0.1; k<=20; k+=step){
+   for(let k = 1.0; k <= 20; k += step){
     let err = 0;
     for(let el in atoms){
       let val = atomFreq[el]*k;
@@ -81,7 +81,7 @@ function findPeaks(errors, ks){
     let prominence =
       Math.max(errors[i-2], errors[i+2]) - errors[i];
 
-    if(isMin && prominence > 0.05){
+    if(isMin && prominence > 0.05 && errors[i] < 0.05){
       peaks.push({k: ks[i], error: errors[i]});
     }
   }
