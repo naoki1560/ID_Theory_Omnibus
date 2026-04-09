@@ -2,22 +2,33 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Isomer Scanner V13 Fix</title>
+<title>Isomer Scanner V13 Stable</title>
 <style>
-body { font-family: sans-serif; padding: 20px; background:#111; color:#eee;}
-input, button { padding:10px; font-size:16px; }
-.result { margin-top:20px; }
-.mode { margin-bottom:15px; padding:10px; background:#222; }
+body {
+  font-family: sans-serif;
+  padding: 20px;
+  background: #111;
+  color: #eee;
+}
+input, button {
+  padding: 10px;
+  font-size: 16px;
+}
+.mode {
+  margin-top: 15px;
+  padding: 10px;
+  background: #222;
+}
 </style>
 </head>
 <body>
 
-<h2>Isomer Scanner（修正版）</h2>
+<h2>Isomer Scanner（V13 安定版）</h2>
 
 <input id="formula" placeholder="例: C5H12">
 <button onclick="runScan()">Scan</button>
 
-<div id="output" class="result"></div>
+<div id="output"></div>
 
 <script>
 const atomFreq = {
@@ -39,7 +50,15 @@ function parseFormula(formula){
 }
 
 function runScan(){
-  const formula = document.getElementById("formula").value;
+  const formula = document.getElementById("formula").value.trim();
+  const out = document.getElementById("output");
+  out.innerHTML = "Scanning...";
+
+  if(!formula){
+    out.innerHTML = "式を入力してくれ";
+    return;
+  }
+
   const atoms = parseFormula(formula);
 
   let freq_sum = 0;
@@ -51,10 +70,10 @@ function runScan(){
   let errors = [];
   let step = 0.0001;
 
-   for(let k = 1.0; k <= 20; k += step){
+  for(let k = 1.0; k <= 20.0; k += step){
     let err = 0;
     for(let el in atoms){
-      let val = atomFreq[el]*k;
+      let val = atomFreq[el] * k;
       err += Math.abs(val - Math.round(val));
     }
     ks.push(k);
@@ -62,6 +81,12 @@ function runScan(){
   }
 
   let peaks = findPeaks(errors, ks);
+
+  if(peaks.length === 0){
+    out.innerHTML = "有効な共鳴なし";
+    return;
+  }
+
   peaks.sort((a,b)=>a.error-b.error);
   peaks = filterDistance(peaks, 0.5).slice(0,3);
 
@@ -71,7 +96,7 @@ function runScan(){
 function findPeaks(errors, ks){
   let peaks = [];
 
-  for(let i=2; i<errors.length-2; i++){
+  for(let i = 2; i < errors.length - 2; i++){
     let isMin =
       errors[i] < errors[i-1] &&
       errors[i] < errors[i+1] &&
@@ -85,6 +110,7 @@ function findPeaks(errors, ks){
       peaks.push({k: ks[i], error: errors[i]});
     }
   }
+
   return peaks;
 }
 
