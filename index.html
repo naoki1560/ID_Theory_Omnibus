@@ -1,141 +1,94 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ID Theory: V13 万物演繹マシン</title>
-    <style>
-        body { font-family: sans-serif; padding: 15px; background-color: #fcfcfc; }
-        input { font-size: 16px; padding: 10px; width: 60%; max-width: 250px; }
-        button { font-size: 16px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 5px; margin-top: 10px; }
-        pre { background: #1e1e1e; color: #00ff00; padding: 15px; overflow-x: auto; font-size: 14px; line-height: 1.5; border-radius: 5px; }
-    </style>
-</head>
-<body>
-    <h2>ID Theory: V13 Universal Decoder</h2>
-    <p>宇宙のシード値(K)をスキャンし、安定する固有状態（最大3つの異性体モード）を逆算します。</p>
-    
-    <input type="text" id="formula" placeholder="例: C5H12, C4H8" />
-    <button onclick="runV13Deduction()">波形スキャン・演繹開始</button>
-    
-    <pre id="result">ここにV13エンジンの演繹結果が表示されます</pre>
+<script>
+// ===== 原子データ =====
+const atom_freq = {
+  H: 128.16,
+  C: 100.36,
+  O: 91.85,
+  N: 96.01,
+  Cl: 45.0,
+  S: 64.28
+};
 
-    <script>
-        // V13 宇宙の基本周波数 (Master Frequencies)
-        const atom_freq = {
-            'H': 128.16, 'C': 100.36, 'N': 96.01, 'O': 91.85, 
-            'F': 85.93, 'S': 64.28, 'Cl': 45.0, 'Br': 25.0, 'I': 15.0
-        };
+// ===== 化学式パース =====
+function parseFormula(formula) {
+  const regex = /([A-Z][a-z]?)(\d*)/g;
+  let match;
+  let result = {};
+  while ((match = regex.exec(formula)) !== null) {
+    const el = match[1];
+    const count = match[2] ? parseInt(match[2]) : 1;
+    if (atom_freq[el]) {
+      result[el] = (result[el] || 0) + count;
+    }
+  }
+  return result;
+}
 
-        // カッコ対応の化学式パーサー
-        function parseFormula(formula) {
-            let stack = [{}];
-            let i = 0;
-            while (i < formula.length) {
-                let char = formula[i];
-                if (char === '(') {
-                    stack.push({}); i++;
-                } else if (char === ')') {
-                    let top = stack.pop(); i++;
-                    let countStr = '';
-                    while (i < formula.length && /[0-9]/.test(formula[i])) { countStr += formula[i]; i++; }
-                    let count = countStr === '' ? 1 : parseInt(countStr);
-                    let current = stack[stack.length - 1];
-                    for (let sym in top) { current[sym] = (current[sym] || 0) + top[sym] * count; }
-                } else if (/[A-Z]/.test(char)) {
-                    let sym = char; i++;
-                    if (i < formula.length && /[a-z]/.test(formula[i])) { sym += formula[i]; i++; }
-                    let countStr = '';
-                    while (i < formula.length && /[0-9]/.test(formula[i])) { countStr += formula[i]; i++; }
-                    let count = countStr === '' ? 1 : parseInt(countStr);
-                    let current = stack[stack.length - 1];
-                    current[sym] = (current[sym] || 0) + count;
-                } else { i++; }
-            }
-            return stack[0];
-        }
+// ===== ローカルミニマム判定 =====
+function isLocalMinimum(errors, i) {
+  return errors[i] < errors[i-1] && errors[i] < errors[i+1];
+}
 
-        function runV13Deduction() {
-            let formula = document.getElementById('formula').value.trim();
-            if(!formula) return;
-            
-            let parsed = parseFormula(formula);
-            let freq_sum = 0;
-            let valid_atoms = true;
+// ===== dz分類 =====
+function classifyDz(dz) {
+  if (dz > 200000) return "A: Linear";
+  if (dz > 80000) return "B: Branched";
+  if (dz > 20000) return "C: Compact";
+  if (dz > 5000) return "D: Ring";
+  if (dz > 1000) return "E: Small Ring";
+  return "F: Ultra Compact";
+}
 
-            for (let sym in parsed) {
-                if (atom_freq[sym]) {
-                    freq_sum += atom_freq[sym] * parsed[sym];
-                } else {
-                    document.getElementById('result').innerText = `エラー: 元素 '${sym}' の基本周波数がV13エンジンに定義されていません。`;
-                    valid_atoms = false; break;
-                }
-            }
-            if(!valid_atoms) return;
+// ===== メイン =====
+function runScan() {
+  const formula = document.getElementById("formula").value;
+  const parsed = parseFormula(formula);
 
-            let out = `🚀 【V13 Universal Decoder】 Analyzing: ${formula}\n`;
-            out += `   [+] Universe Wave Total (freq_sum): ${freq_sum.toFixed(2)} Hz\n\n`;
+  let freq_sum = 0;
+  for (let el in parsed) {
+    freq_sum += atom_freq[el] * parsed[el];
+  }
 
-            // 1. 宇宙のシード値(K)のスキャン (SciPy find_peaks の代替実装)
-            let step = 0.005;
-            let errors = [];
-            for(let k = 0.1; k <= 20.0; k += step) {
-                let err = 0;
-                for(let sym in parsed) {
-                    let val = atom_freq[sym] * k;
-                    err += Math.abs(val - Math.round(val)); // 波のズレ（エラー）を蓄積
-                }
-                errors.push({k: k, err: err});
-            }
+  let step = 0.001;
+  let errors = [];
+  let ks = [];
 
-            // エラーが極小になる谷底（波が同期するピーク）を検出
-            let peaks = [];
-            for(let i = 2; i < errors.length - 2; i++) {
-                if(errors[i].err < errors[i-1].err && errors[i].err < errors[i-2].err && 
-                   errors[i].err < errors[i+1].err && errors[i].err < errors[i+2].err) {
-                    if(errors[i].err < 0.5) { // 許容できる波のズレの上限（存在限界）
-                        peaks.push(errors[i]);
-                    }
-                }
-            }
+  for (let k = 0.1; k <= 20; k += step) {
+    let error = 0;
+    for (let el in parsed) {
+      let val = atom_freq[el] * k;
+      error += Math.abs(val - Math.round(val));
+    }
+    ks.push(k);
+    errors.push(error);
+  }
 
-            // エラーが小さい順（同期率が高い順）にソートして上位3つを抽出
-            peaks.sort((a, b) => a.err - b.err);
-            let eigen_k_values = peaks.slice(0, 3).map(p => p.k);
-            eigen_k_values.sort((a, b) => a - b); // Kが小さい順に並び替え
+  let peaks = [];
+  for (let i = 1; i < errors.length - 1; i++) {
+    if (isLocalMinimum(errors, i) && errors[i] < 0.05) {
+      peaks.push({k: ks[i], error: errors[i]});
+    }
+  }
 
-            if (eigen_k_values.length === 0) {
-                out += `   [-] No stable eigenstates found in the universe.\n       (この構成では波が同期せず、存在できません)`;
-                document.getElementById('result').innerText = out;
-                return;
-            }
+  peaks.sort((a,b)=>a.error-b.error);
+  let top = peaks.slice(0,6).sort((a,b)=>a.k-b.k);
 
-            out += `   [+] Discovered ${eigen_k_values.length} stable quantum eigenstates (Isomer Modes).\n`;
+  let out = "";
+  if (top.length === 0) {
+    out = "No resonance modes found.";
+  } else {
+    top.forEach((p,i)=>{
+      let dz = Math.pow((freq_sum / (1.02 * p.k)),2);
+      let type = classifyDz(dz);
+      out += `
+      <b>Mode ${i+1}</b><br>
+      K = ${p.k.toFixed(4)}<br>
+      dz = ${dz.toFixed(1)}<br>
+      Type = ${type}<br><br>
+      `;
+    });
+  }
 
-            // 2. 各シード値から空間テンソル(dz)と物性を逆算
-            const modeNames = ["Linear / Extended (直鎖型)", "Branched (分岐型)", "Highly Symmetrical (対称型)"];
-
-            eigen_k_values.forEach((K, i) => {
-                let mode_char = String.fromCharCode(65 + i); // A, B, C...
-                let isomer_type = modeNames[i] || "Unknown";
-                
-                // 【第1の鍵】K値から空間の奥行き(dz)を純粋幾何学で逆算
-                let dz_calc = Math.pow((freq_sum / (1.02 * K)), 2);
-                
-                // dzをベースにした物性演繹 (V13仕様に基づくダミー計算式ではなく、幾何学的連動)
-                let zpe = (dz_calc / 100.0) * 1.5; 
-                let bp = (dz_calc / 500.0) - 273.15; // 簡易的な熱力学連動
-
-                out += `\n   🟢 Mode ${mode_char} (Resonance Seed K = ${K.toFixed(4)})\n`;
-                out += `      ├─ 逆算空間テンソル(dz) : ${dz_calc.toFixed(1)}\n`;
-                out += `      ├─ 推定空間トポロジー   : ${isomer_type}\n`;
-                out += `      ├─ 零点エネルギー(ZPE)  : ${zpe.toFixed(2)} eV\n`;
-                out += `      └─ 基礎熱力学指標       : ${bp.toFixed(1)} C\n`;
-            });
-
-            out += `\n   └─ ※このdzをベースに、すべてのマクロ物性が一意に確定します。`;
-            document.getElementById('result').innerText = out;
-        }
-    </script>
-</body>
-</html>
+  document.getElementById("output").innerHTML = out;
+}
+</script>
